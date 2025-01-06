@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ButtonStyle">
+        <item name="android:background">@drawable/background_for_button</item>
+        <item name="android:padding">10dp</item>
+        <item name="android:elevation">4dp</item>
+    </style>
+    <style name="ButtonMainBack">
+        <item name="android:color">@color/back_color</item>
+        <item name="android:radius">1000dp</item>
+        <item name="android:strokeColor">@color/dark_green</item>
+        <item name="android:strokeWidth">2</item>
+    </style>
+    <style name="MyRatingBar" parent="Theme.AppCompat">
+        <item name="colorControlNormal">@color/color_for_rating_bar_off</item>
+        <item name="colorControlActivated">@color/color_for_rating_bar_on</item>
+    </style>
+</resources>
