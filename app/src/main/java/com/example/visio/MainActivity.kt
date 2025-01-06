@@ -17,12 +17,18 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.app.AlarmManager
 import android.app.PendingIntent
+import android.media.Image
 import android.util.TypedValue
+import android.widget.ImageButton
+import android.util.Log
 class MainActivity : AppCompatActivity() {
     private lateinit var sharedPreferences: SharedPreferences
     private lateinit var exitCounterTextView: TextView
-    private var exitCounter: Int = 0
-    private var lastResetTime: Long = 0
+    private lateinit var navigateButton: ImageButton
+    private lateinit var weekStatistic: LinearLayout
+    private lateinit var daysOfWeek: List<DayOfWeek>
+    private lateinit var resetHandler: PendingIntent
+    private var currentDayOfWeek: DayOfWeek? = null
 
     private lateinit var dayTextView: TextView
     private var dayCount: Int = 0
@@ -51,17 +57,40 @@ class MainActivity : AppCompatActivity() {
         }
         sharedPreferences = getSharedPreferences("ExitCounterPrefs", Context.MODE_PRIVATE)
         exitCounterTextView = findViewById(R.id.training_counter_text)
+        navigateButton = findViewById(R.id.logo_button_main)
+        weekStatistic = findViewById(R.id.week_statistic)
 
-        // Загружаем счетчик выходов и время последнего сброса из SharedPreferences
-        exitCounter = sharedPreferences.getInt("exitCounter", 0)
-        lastResetTime = sharedPreferences.getLong("lastResetTime", 0)
+        // Инициализация объектов для каждого дня недели
+        daysOfWeek = listOf(
+            DayOfWeek(Calendar.SUNDAY, "Воскресенье", R.id.sunday_bar, R.id.sunday_value),
+            DayOfWeek(Calendar.MONDAY, "Понедельник", R.id.monday_bar, R.id.monday_value),
+            DayOfWeek(Calendar.TUESDAY, "Вторник", R.id.tuesday_bar, R.id.tuesday_value),
+            DayOfWeek(Calendar.WEDNESDAY, "Среда", R.id.wensday_bar, R.id.wensday_value),
+            DayOfWeek(Calendar.THURSDAY, "Четверг", R.id.thursday_bar, R.id.thursday_value),
+            DayOfWeek(Calendar.FRIDAY, "Пятница", R.id.friday_bar, R.id.friday_value),
+            DayOfWeek(Calendar.SATURDAY, "Суббота", R.id.saturday_bar, R.id.saturday_value)
+        )
 
-        // Проверяем, прошла ли полночь
+        // Проверка на сброс данных
+        // Проверка на сброс данных
         checkForReset()
 
-        // Обновляем TextView
-        updateExitCounterTextView()
+        // Загружаем данные текущего дня
+        loadDayData()
 
+        // Устанавливаем клик слушатель на кнопку
+        navigateButton.setOnClickListener {
+            handler.postDelayed({
+                incrementExitCount()
+                saveDayData()
+                updateExitCounterTextView()
+                updateBarHeight(currentDayOfWeek!!)},2000)
+            val intent = Intent(this, MainButtonTraning::class.java)
+            startActivity(intent)
+        }
+
+        // Установка ежедневного сброса в 00:00
+        setDailyReset()
 
         dayTextView = findViewById(R.id.day_counter)
         block_rating = findViewById(R.id.rating_your_eyes)
@@ -136,25 +165,16 @@ class MainActivity : AppCompatActivity() {
         startActivity(intent)
     }
 
-        private fun updateDay() {
-            dayCount++
-            dayTextView.text = "Day $dayCount"
-        }
+    private fun updateDay() {
+        dayCount++
+        dayTextView.text = "Day $dayCount"
+    }
 
-        private fun getMillisUntilMidnight(): Long {
-            val calendar = Calendar.getInstance()
-            calendar.set(Calendar.HOUR_OF_DAY, 0)
-            calendar.set(Calendar.MINUTE, 0)
-            calendar.set(Calendar.SECOND, 0)
-            calendar.set(Calendar.MILLISECOND, 0)
-            calendar.add(Calendar.DAY_OF_MONTH, 1)
-            return calendar.timeInMillis - System.currentTimeMillis()
-        }
 
-        override fun onDestroy() {
-            super.onDestroy()
-            handler.removeCallbacks(updateDayRunnable)
-        }
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacks(updateDayRunnable)
+    }
 
     private fun checkRatingStatus() {
         val lastRatingTime = preferences.getLong("last_rating_time", 0)
@@ -170,43 +190,108 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == 1 && resultCode == RESULT_OK) {
-            // Получение счетчика выходов из AnimationActivity
-            val dayOfWeek = data?.getIntExtra("dayOfWeek", Calendar.getInstance().get(Calendar.DAY_OF_WEEK))
-            if (dayOfWeek != null) {
-                exitCounter = data.getIntExtra("exitCounter", 0)
-                updateExitCounterTextView()
-
-                // Сохранение счетчика выходов для текущего дня недели в SharedPreferences
-                val editor = sharedPreferences.edit()
-                editor.putInt("day_$dayOfWeek", exitCounter)
-                editor.apply()
-            }
+    private fun loadDayData() {
+        daysOfWeek.forEach { day ->
+            day.exitCount = sharedPreferences.getInt("day_${day.id}", 0)
+            updateBarHeight(day)
+            updateExitCountText(day)
         }
+        val calendar = Calendar.getInstance()
+        currentDayOfWeek = daysOfWeek.find { it.id == calendar.get(Calendar.DAY_OF_WEEK) }
+        updateExitCounterTextView()
+    }
+
+    private fun saveDayData() {
+        val editor = sharedPreferences.edit()
+        currentDayOfWeek?.let {
+            editor.putInt("day_${it.id}", it.exitCount)
+        }
+        editor.apply()
+    }
+
+    private fun incrementExitCount() {
+        currentDayOfWeek?.exitCount = currentDayOfWeek?.exitCount?.plus(1) ?: 0
     }
 
     private fun updateExitCounterTextView() {
-        exitCounterTextView.text = "$exitCounter/0"
+        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/0"
     }
 
+    private fun updateBarHeight(day: DayOfWeek) {
+        val barView = findViewById<View>(day.barViewId)
+        barView.layoutParams.width = dpToPx(day.exitCount * 15) // 20dp за каждую прибавку
+        barView.requestLayout()
+    }
+
+    private fun updateExitCountText(day: DayOfWeek) {
+        val countTextView = findViewById<TextView>(day.countViewId)
+        countTextView.text = day.exitCount.toString()
+    }
+
+    private fun dpToPx(dp: Int): Int {
+        return TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            dp.toFloat(),
+            resources.displayMetrics
+        ).toInt()
+    }
     private fun checkForReset() {
         val currentTime = System.currentTimeMillis()
         val calendar = Calendar.getInstance().apply { timeInMillis = currentTime }
         val currentDay = calendar.get(Calendar.DAY_OF_YEAR)
-
         val lastResetDay = sharedPreferences.getInt("lastResetDay", currentDay)
 
         if (calendar.get(Calendar.DAY_OF_WEEK) == Calendar.MONDAY && currentDay != lastResetDay) {
             // Сбрасываем счетчики выходов для всех дней недели
             val editor = sharedPreferences.edit()
-            for (day in Calendar.SUNDAY..Calendar.SATURDAY) {
-                editor.putInt("day_$day", 0)
+            for (day in daysOfWeek) {
+                day.exitCount = 0
+                editor.putInt("day_${day.id}", 0)
             }
             editor.putInt("lastResetDay", currentDay)
             editor.apply()
+        } else if (currentDay != lastResetDay) {
+            // Сбрасываем только счетчик текущего дня недели
+            currentDayOfWeek?.let {
+                val editor = sharedPreferences.edit()
+                it.exitCount = 0
+                editor.putInt("day_${it.id}", 0)
+                editor.putInt("lastResetDay", currentDay)
+                editor.apply()
+            }
         }
+    }
+
+    private fun setDailyReset() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(this, MainActivity::class.java)
+        resetHandler = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+
+        // Если текущее время уже после 00:00, установить сброс на следующий день
+        if (Calendar.getInstance().after(calendar)) {
+            calendar.add(Calendar.DAY_OF_YEAR, 1)
+        }
+
+        alarmManager.setRepeating(
+            AlarmManager.RTC_WAKEUP,
+            calendar.timeInMillis,
+            AlarmManager.INTERVAL_DAY,
+            resetHandler
+        )
+    }
+
+    private fun getMillisUntilMidnight(): Long {
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+        calendar.add(Calendar.DAY_OF_MONTH, 1)
+        return calendar.timeInMillis - System.currentTimeMillis()
     }
 }
