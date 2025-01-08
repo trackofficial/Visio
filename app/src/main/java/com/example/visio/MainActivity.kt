@@ -1,6 +1,7 @@
 package com.example.visio
 
 import android.content.Intent
+import java.text.SimpleDateFormat
 import android.os.Bundle
 import android.view.View
 import androidx.activity.enableEdgeToEdge
@@ -38,6 +39,8 @@ class MainActivity : AppCompatActivity() {
     var value = 0
     private lateinit var imageBlockBar:FrameLayout
     private lateinit var enImage: ImageView
+
+    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
 
     private lateinit var dayTextView: TextView
     private var dayCount: Int = 0
@@ -345,5 +348,22 @@ class MainActivity : AppCompatActivity() {
         val params = frameLayout.layoutParams as ViewGroup.MarginLayoutParams
         params.topMargin = (topMargin * resources.displayMetrics.density).toInt()
         frameLayout.layoutParams = params
+    }
+    private fun startMidnightUpdater() {
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.HOUR_OF_DAY, 0)
+        calendar.set(Calendar.MINUTE, 0)
+        calendar.set(Calendar.SECOND, 0)
+        calendar.set(Calendar.MILLISECOND, 0)
+
+        val midnightTimeInMillis = calendar.timeInMillis
+
+        Timer().scheduleAtFixedRate(object : TimerTask() {
+            override fun run() {
+                runOnUiThread {
+                    updateDay()
+                }
+            }
+        }, midnightTimeInMillis, 24 * 60 * 60 * 1000) // 24 часа в миллисекундах
     }
 }
