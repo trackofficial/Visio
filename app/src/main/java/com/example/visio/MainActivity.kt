@@ -21,6 +21,9 @@ import android.media.Image
 import android.util.TypedValue
 import android.widget.ImageButton
 import android.util.Log
+import android.widget.FrameLayout
+import android.widget.ImageView
+import android.view.ViewGroup
 import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
@@ -31,10 +34,12 @@ class MainActivity : AppCompatActivity() {
     private lateinit var daysOfWeek: List<DayOfWeek>
     private lateinit var resetHandler: PendingIntent
     private var currentDayOfWeek: DayOfWeek? = null
+    private lateinit var statusBar: View
+    private lateinit var statusBarBlock:FrameLayout
+    var value = 0
+    private lateinit var imageBlockBar:FrameLayout
+    private lateinit var enImage: ImageView
 
-
-    private val PREFS_NAME = "DayCounterPrefs"
-    private val PREF_DAY_COUNTER = "dayCounter"
     private lateinit var dayTextView: TextView
     private var dayCount: Int = 0
     private val handler = Handler(Looper.getMainLooper())
@@ -43,6 +48,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var block_rating: LinearLayout
     private lateinit var week_statistic: LinearLayout
     private val preferences by lazy { getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+
+    private val PREFS_NAME = "DayCounterPrefs"
+    private val PREF_DAY_COUNTER = "dayCounter"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,9 +63,14 @@ class MainActivity : AppCompatActivity() {
 
         }
         sharedPreferences = getSharedPreferences("ExitCounterPrefs", Context.MODE_PRIVATE)
+        sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
         exitCounterTextView = findViewById(R.id.training_counter_text)
         navigateButton = findViewById(R.id.logo_button_main)
         weekStatistic = findViewById(R.id.week_statistic)
+        statusBar = findViewById(R.id.status_for_bar)
+        statusBarBlock = findViewById(R.id.countebar)
+        enImage = findViewById(R.id.end_image)
+        imageBlockBar = findViewById(R.id.block_image_bar)
 
         // Инициализация объектов для каждого дня недели
         daysOfWeek = listOf(
@@ -69,6 +82,7 @@ class MainActivity : AppCompatActivity() {
             DayOfWeek(Calendar.FRIDAY, "Пятница", R.id.friday_bar, R.id.friday_value),
             DayOfWeek(Calendar.SATURDAY, "Суббота", R.id.saturday_bar, R.id.saturday_value)
         )
+
         dayTextView = findViewById(R.id.day_counter)
 
         // Обновление UI
@@ -76,8 +90,11 @@ class MainActivity : AppCompatActivity() {
 
         // Планирование задачи
         handler.postDelayed(runnable, getMillisUntilMidnight())
+
+        // Проверка на сброс данных
         // Проверка на сброс данных
         checkForReset()
+
         // Загружаем данные текущего дня
         loadDayData()
 
@@ -86,7 +103,7 @@ class MainActivity : AppCompatActivity() {
             handler.postDelayed({
                 incrementExitCount()
                 saveDayData()
-                updateExitCounterTextView()
+                onResume()
                 updateBarHeight(currentDayOfWeek!!)},2000)
             val intent = Intent(this, MainButtonTraning::class.java)
             startActivity(intent)
@@ -135,6 +152,7 @@ class MainActivity : AppCompatActivity() {
         }
         checkRatingStatus()
     }
+
     private fun showRatingBar() {
         runOnUiThread {
             ratingBar.visibility = View.VISIBLE
@@ -165,6 +183,9 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, Account::class.java)
         startActivity(intent)
     }
+
+
+
     private fun checkRatingStatus() {
         val lastRatingTime = preferences.getLong("last_rating_time", 0)
         if (System.currentTimeMillis() - lastRatingTime < getMillisUntilMidnight()) {
@@ -187,7 +208,7 @@ class MainActivity : AppCompatActivity() {
         }
         val calendar = Calendar.getInstance()
         currentDayOfWeek = daysOfWeek.find { it.id == calendar.get(Calendar.DAY_OF_WEEK) }
-        updateExitCounterTextView()
+        onResume()
     }
 
     private fun saveDayData() {
@@ -202,9 +223,11 @@ class MainActivity : AppCompatActivity() {
         currentDayOfWeek?.exitCount = currentDayOfWeek?.exitCount?.plus(1) ?: 0
     }
 
-    private fun updateExitCounterTextView() {
-        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/0"
-    }
+    /*private fun updateExitCounterTextView() {
+        val counter = sharedPreferences.getInt("counter", 0)
+
+        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/$counter"
+    }*/
 
     private fun updateBarHeight(day: DayOfWeek) {
         val barView = findViewById<View>(day.barViewId)
@@ -283,6 +306,41 @@ class MainActivity : AppCompatActivity() {
         calendar.add(Calendar.DAY_OF_MONTH, 1)
         return calendar.timeInMillis - System.currentTimeMillis()
     }
+    override fun onResume() {
+        super.onResume()
+
+        // Загружаем значение счётчика из SharedPreferences
+        val counter = sharedPreferences.getInt("counter", 0)
+
+        // Обновляем текстовое поле в формате "$alphab / $counter"
+        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/$counter"
+        val status_value = currentDayOfWeek?.exitCount
+
+
+        // Обновляем ширину прогресс-бара и пустого бара в зависимости от соотношения
+        // Вычисляем соотношение и обновляем ширину прогресс-бара и пустого бара
+        val totalWidth = resources.displayMetrics.widthPixels - 2 * (30 * resources.displayMetrics.density).toInt()
+        val progressBarWidth: Int
+        val progressRatio = status_value!!.toFloat() / counter.toFloat()
+        if (status_value!!.toInt() >= counter) {
+            enImage.visibility = View.VISIBLE
+            setMarginTop(imageBlockBar, 0)
+            progressBarWidth = totalWidth
+        } else {
+            enImage.visibility = View.GONE
+            setMarginTop(imageBlockBar, 8)
+            progressBarWidth = (totalWidth * progressRatio).toInt()
+        }
+
+        val progressBarParams = statusBar.layoutParams
+        progressBarParams.width = progressBarWidth
+        statusBar.layoutParams = progressBarParams
+    }
+    private fun setMarginTop(frameLayout: FrameLayout, topMargin: Int) {
+        val params = frameLayout.layoutParams as ViewGroup.MarginLayoutParams
+        params.topMargin = (topMargin * resources.displayMetrics.density).toInt()
+        frameLayout.layoutParams = params
+    }
     private val runnable = object : Runnable {
         override fun run() {
             incrementDayCounter()
@@ -290,6 +348,7 @@ class MainActivity : AppCompatActivity() {
             handler.postDelayed(this, TimeUnit.DAYS.toMillis(1)) // 24 часа
         }
     }
+
     private fun updateDayCounterUI() {
         val dayCounter = getDayCounter()
         dayTextView.text = "Day $dayCounter"
