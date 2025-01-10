@@ -1,7 +1,6 @@
 package com.example.visio
 
 import android.content.Intent
-import java.text.SimpleDateFormat
 import android.os.Bundle
 import android.view.View
 import androidx.activity.enableEdgeToEdge
@@ -22,9 +21,7 @@ import android.media.Image
 import android.util.TypedValue
 import android.widget.ImageButton
 import android.util.Log
-import android.widget.FrameLayout
-import android.widget.ImageView
-import android.view.ViewGroup
+import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     private lateinit var sharedPreferences: SharedPreferences
@@ -34,14 +31,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var daysOfWeek: List<DayOfWeek>
     private lateinit var resetHandler: PendingIntent
     private var currentDayOfWeek: DayOfWeek? = null
-    private lateinit var statusBar: View
-    private lateinit var statusBarBlock:FrameLayout
-    var value = 0
-    private lateinit var imageBlockBar:FrameLayout
-    private lateinit var enImage: ImageView
 
-    private val dateFormat = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
 
+    private val PREFS_NAME = "DayCounterPrefs"
+    private val PREF_DAY_COUNTER = "dayCounter"
     private lateinit var dayTextView: TextView
     private var dayCount: Int = 0
     private val handler = Handler(Looper.getMainLooper())
@@ -49,12 +42,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var text_rating: TextView
     private lateinit var block_rating: LinearLayout
     private lateinit var week_statistic: LinearLayout
-    private var updateDayRunnable = object : Runnable {
-        override fun run() {
-            updateDay()
-            handler.postDelayed(this, getMillisUntilMidnight())
-        }
-    }
     private val preferences by lazy { getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -68,14 +55,9 @@ class MainActivity : AppCompatActivity() {
 
         }
         sharedPreferences = getSharedPreferences("ExitCounterPrefs", Context.MODE_PRIVATE)
-        sharedPreferences = getSharedPreferences("AppPrefs", MODE_PRIVATE)
         exitCounterTextView = findViewById(R.id.training_counter_text)
         navigateButton = findViewById(R.id.logo_button_main)
         weekStatistic = findViewById(R.id.week_statistic)
-        statusBar = findViewById(R.id.status_for_bar)
-        statusBarBlock = findViewById(R.id.countebar)
-        enImage = findViewById(R.id.end_image)
-        imageBlockBar = findViewById(R.id.block_image_bar)
 
         // Инициализация объектов для каждого дня недели
         daysOfWeek = listOf(
@@ -87,11 +69,15 @@ class MainActivity : AppCompatActivity() {
             DayOfWeek(Calendar.FRIDAY, "Пятница", R.id.friday_bar, R.id.friday_value),
             DayOfWeek(Calendar.SATURDAY, "Суббота", R.id.saturday_bar, R.id.saturday_value)
         )
+        dayTextView = findViewById(R.id.day_counter)
 
-        // Проверка на сброс данных
+        // Обновление UI
+        updateDayCounterUI()
+
+        // Планирование задачи
+        handler.postDelayed(runnable, getMillisUntilMidnight())
         // Проверка на сброс данных
         checkForReset()
-
         // Загружаем данные текущего дня
         loadDayData()
 
@@ -100,7 +86,7 @@ class MainActivity : AppCompatActivity() {
             handler.postDelayed({
                 incrementExitCount()
                 saveDayData()
-                onResume()
+                updateExitCounterTextView()
                 updateBarHeight(currentDayOfWeek!!)},2000)
             val intent = Intent(this, MainButtonTraning::class.java)
             startActivity(intent)
@@ -111,8 +97,6 @@ class MainActivity : AppCompatActivity() {
 
         dayTextView = findViewById(R.id.day_counter)
         block_rating = findViewById(R.id.rating_your_eyes)
-        dayTextView.text = "Day $dayCount"
-        handler.post(updateDayRunnable)
         ratingBar = findViewById(R.id.ratingbar)
         text_rating = findViewById(R.id.text_rating_bar)
         week_statistic = findViewById(R.id.week_statistic)
@@ -151,7 +135,6 @@ class MainActivity : AppCompatActivity() {
         }
         checkRatingStatus()
     }
-
     private fun showRatingBar() {
         runOnUiThread {
             ratingBar.visibility = View.VISIBLE
@@ -182,18 +165,6 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, Account::class.java)
         startActivity(intent)
     }
-
-    private fun updateDay() {
-        dayCount++
-        dayTextView.text = "Day $dayCount"
-    }
-
-
-    override fun onDestroy() {
-        super.onDestroy()
-        handler.removeCallbacks(updateDayRunnable)
-    }
-
     private fun checkRatingStatus() {
         val lastRatingTime = preferences.getLong("last_rating_time", 0)
         if (System.currentTimeMillis() - lastRatingTime < getMillisUntilMidnight()) {
@@ -216,7 +187,7 @@ class MainActivity : AppCompatActivity() {
         }
         val calendar = Calendar.getInstance()
         currentDayOfWeek = daysOfWeek.find { it.id == calendar.get(Calendar.DAY_OF_WEEK) }
-        onResume()
+        updateExitCounterTextView()
     }
 
     private fun saveDayData() {
@@ -231,11 +202,9 @@ class MainActivity : AppCompatActivity() {
         currentDayOfWeek?.exitCount = currentDayOfWeek?.exitCount?.plus(1) ?: 0
     }
 
-    /*private fun updateExitCounterTextView() {
-        val counter = sharedPreferences.getInt("counter", 0)
-
-        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/$counter"
-    }*/
+    private fun updateExitCounterTextView() {
+        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/0"
+    }
 
     private fun updateBarHeight(day: DayOfWeek) {
         val barView = findViewById<View>(day.barViewId)
@@ -314,56 +283,26 @@ class MainActivity : AppCompatActivity() {
         calendar.add(Calendar.DAY_OF_MONTH, 1)
         return calendar.timeInMillis - System.currentTimeMillis()
     }
-    override fun onResume() {
-        super.onResume()
-
-        // Загружаем значение счётчика из SharedPreferences
-        val counter = sharedPreferences.getInt("counter", 0)
-
-        // Обновляем текстовое поле в формате "$alphab / $counter"
-        exitCounterTextView.text = "${currentDayOfWeek?.exitCount}/$counter"
-        val status_value = currentDayOfWeek?.exitCount
-
-
-        // Обновляем ширину прогресс-бара и пустого бара в зависимости от соотношения
-        // Вычисляем соотношение и обновляем ширину прогресс-бара и пустого бара
-        val totalWidth = resources.displayMetrics.widthPixels - 2 * (30 * resources.displayMetrics.density).toInt()
-        val progressBarWidth: Int
-        val progressRatio = status_value!!.toFloat() / counter.toFloat()
-        if (status_value!!.toInt() >= counter) {
-            enImage.visibility = View.VISIBLE
-            setMarginTop(imageBlockBar, 0)
-            progressBarWidth = totalWidth
-        } else {
-            enImage.visibility = View.GONE
-            setMarginTop(imageBlockBar, 8)
-            progressBarWidth = (totalWidth * progressRatio).toInt()
+    private val runnable = object : Runnable {
+        override fun run() {
+            incrementDayCounter()
+            updateDayCounterUI()
+            handler.postDelayed(this, TimeUnit.DAYS.toMillis(1)) // 24 часа
         }
-
-        val progressBarParams = statusBar.layoutParams
-        progressBarParams.width = progressBarWidth
-        statusBar.layoutParams = progressBarParams
     }
-    private fun setMarginTop(frameLayout: FrameLayout, topMargin: Int) {
-        val params = frameLayout.layoutParams as ViewGroup.MarginLayoutParams
-        params.topMargin = (topMargin * resources.displayMetrics.density).toInt()
-        frameLayout.layoutParams = params
+    private fun updateDayCounterUI() {
+        val dayCounter = getDayCounter()
+        dayTextView.text = "Day $dayCounter"
     }
-    private fun startMidnightUpdater() {
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.HOUR_OF_DAY, 0)
-        calendar.set(Calendar.MINUTE, 0)
-        calendar.set(Calendar.SECOND, 0)
-        calendar.set(Calendar.MILLISECOND, 0)
 
-        val midnightTimeInMillis = calendar.timeInMillis
+    private fun getDayCounter(): Int {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getInt(PREF_DAY_COUNTER, 0)
+    }
 
-        Timer().scheduleAtFixedRate(object : TimerTask() {
-            override fun run() {
-                runOnUiThread {
-                    updateDay()
-                }
-            }
-        }, midnightTimeInMillis, 24 * 60 * 60 * 1000) // 24 часа в миллисекундах
+    private fun incrementDayCounter() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val dayCounter = prefs.getInt(PREF_DAY_COUNTER, 0) + 1
+        prefs.edit().putInt(PREF_DAY_COUNTER, dayCounter).apply()
     }
 }
